@@ -257,12 +257,10 @@ class AsterismGUI:
         if not connection_name or not connection_name.strip():
             self.cancel_connection()
             return
-        print("before")
 
         # Create connection
         self.map.add_connection(source, destination, connection_name.strip(), "#A6ADC8", self.map.current_layer)
 
-        print("after")
         # End connection mode
         self.cancel_connection()
 
