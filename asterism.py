@@ -34,6 +34,7 @@ class Asterism:
         for index, connection in enumerate(self.connections):
             if connection.layer > layer:
                 self.connections.insert(index, new_connection)
+                return
 
         # Insert at the end if in latest layer
         self.connections.append(new_connection)

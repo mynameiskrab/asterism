@@ -257,10 +257,12 @@ class AsterismGUI:
         if not connection_name or not connection_name.strip():
             self.cancel_connection()
             return
+        print("before")
 
         # Create connection
         self.map.add_connection(source, destination, connection_name.strip(), "#A6ADC8", self.map.current_layer)
 
+        print("after")
         # End connection mode
         self.cancel_connection()
 
@@ -299,20 +301,26 @@ class AsterismGUI:
             # Filter out connections not in this layer.
             if connection.layer == self.map.current_layer:
 
-                # Draw connection line
+                # Grab Bubble X & Y positions
+                start_x = connection.node_one.xpos   # Bubble 1: x & y position
+                start_y = connection.node_one.ypos
+                end_x = connection.node_two.xpos     # Bubble 2: x & y position
+                end_y = connection.node_two.ypos
+
+                # Draw connection line.
                 self.canvas.create_line(
-                    connection.node_one.xpos,
-                    connection.node_one.ypos,
-                    connection.node_two.xpos,
-                    connection.node_two.ypos,
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
                     fill=connection.rgb,
                     width=2,
                     arrow=tk.LAST
                 )
 
                 #write connection type name
-                midpoint_x = (connection.node_one.xpos + connection.node_two.xpos) / 2
-                midpoint_y = (connection.node_one.ypos + connection.node_two.ypos) / 2
+                midpoint_x = (start_x + end_x) / 2
+                midpoint_y = (start_y + end_y) / 2
 
                 self.canvas.create_text(
                     midpoint_x,
@@ -336,6 +344,7 @@ class AsterismGUI:
                 outline = "#89b4fa"
                 width = 3
 
+            # Draw Thought with center at bubble's X & Y position
             self.canvas.create_oval(
                 bubble.xpos - w,
                 bubble.ypos - h,
