@@ -32,4 +32,3 @@ class Thought:
     def setsize(self, width, height):
         self.width = width
         self.height = height
-
