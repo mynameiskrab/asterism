@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+from tkinter import simpledialog, messagebox, ttk
 import math
 
 from asterism import Asterism
@@ -20,6 +20,17 @@ class AsterismGUI:
         # Connection creation state
         self.connect_mode = False
         self.selected_bubble = None
+        # add multiple state check variable
+        self.mode = "idle"
+        
+        # Mouse click variables
+        self.click_timer = None
+        self.hold_timer = None
+        self.is_holding = False
+        self.click_count = 0
+        # Mouse timings
+        self.HOLD_DELAY = 400
+        self.DOUBLE_DELAY = 200
 
         # ------------------------------
         # HEADER
@@ -52,7 +63,7 @@ class AsterismGUI:
         # ------------------------------
 
         # ToolBar will be respecced to handle Menu/IO Options. Bubble creation should be
-        # handled with button presses.
+        # handled with mouse button presses.
 
         toolbar = tk.Frame(root, bg="#313244", height=50)
         toolbar.pack(fill="x")
@@ -96,13 +107,13 @@ class AsterismGUI:
         )
         self.status.pack(side="left", padx=3)
 
-        self.coord = tk.Label(
+        self.coordinates = tk.Label(
             statusbar,
             text="400,300",
             fg="#cdd6f4",
             bg="#313244"
         )
-        self.coord.pack(side="right", padx=3)
+        self.coordinates.pack(side="right", padx=3)
 
         # ------------------------------
         # CANVAS
@@ -121,11 +132,43 @@ class AsterismGUI:
             pady=10
         )
 
-        # Listen for mouse clicks
-        self.canvas.bind(
-            "<Button-1>",
-            self.on_canvas_click
+        # ------------------------------
+        # Button Binds
+        # ------------------------------
+
+        # Mouse binds for single, double clicks, & hold for left clicks
+        self.canvas.bind("<Button-1>", self.left_click_press)
+        self.canvas.bind("<ButtonRelease-1>", self.left_click_release)
+
+        # Mouse binds for single, double clicks, & hold for right clicks
+        self.canvas.bind("<Button-3>", self.right_click_press)
+        self.canvas.bind("<ButtonRelease-3>", self.right_click_release)
+
+        # Binds mouse movements to check for mouse coordinates
+        self.canvas.bind("<Motion>", self.on_mouse_move)
+
+        # ------------------------------
+        # Thought Option Menu
+        # This menu pulls up when you click on a thought
+        # ------------------------------
+
+        self.thought_menu = tk.Frame(
+            self.canvas,
+            width = 20,
+            height = 10,
         )
+        self.thought_menu.place_forget()
+
+        focus = tk.Button(
+            self.thought_menu,
+            text = "Focus",
+            command = self.focus_thought,
+        )
+        focus.pack(padx = 5, pady = 5)
+
+        # Bind menu buttons to dismiss on middle/right click
+        focus.bind("<Button-2>", self.dismiss_menu)
+        focus.bind("<Button-3>", self.dismiss_menu)
 
         # ------------------------------
         # TEST DATA
@@ -206,15 +249,59 @@ class AsterismGUI:
     # HANDLE CANVAS CLICK
     # ------------------------------
 
-    def on_canvas_click(self, event):
+    # Checks coordinates of mouse
+    def on_mouse_move(self, event):
+        self.coordinates.config(
+            text=f"{event.x}, {event.y}"
+        )
+    
+    
+    # - Left Click Functions - #
+    
+    # Left click hold checker - determines click type (single, double, hold)
+    def left_click_press(self, event):
+        # Reset variables
+        self.is_holding = False
+        if self.click_timer:
+            event.widget.after_cancel(self.click_timer)
+            self.click_timer = None
+        
+        # Start a timer
+        self.hold_timer = self.root.after(self.HOLD_DELAY, lambda: self.on_left_hold(event))
 
-        if not self.connect_mode:
+    # Left click single double checker - if hold method wasn't called,
+    # call single or double method
+    def left_click_release(self, event):
+        # Reset hold timer
+        if self.hold_timer:
+            self.root.after_cancel(self.hold_timer)
+            self.hold_timer = None
+
+        # If hold was called, return
+        if self.is_holding:
+            self.click_count = 0
             return
 
-        clicked = self.find_bubble_at(
-            event.x,
-            event.y
+        self.click_count += 1
+        if self.click_count == 1:
+            self.click_timer = self.root.after(self.DOUBLE_DELAY, lambda: self.on_left_click(event))
+        elif self.click_count > 1:
+            self.on_double_left_click(event)
+
+
+
+    # Single left click function call
+    # Allows for connection making.
+    def on_left_click(self, event):
+
+        self.click_count = 0        # reset click counter
+
+        self.status.config(
+            text="Single left click"
         )
+
+        # Check for thought bubble
+        clicked = self.find_bubble_at(event.x, event.y)
 
         if clicked is None:
             return
@@ -259,10 +346,12 @@ class AsterismGUI:
             return
 
         # Create connection
-        self.map.add_connection(source, destination, connection_name.strip(), "#A6ADC8", self.map.current_layer)
-
-        # End connection mode
-        self.cancel_connection()
+        self.map.add_connection(
+            source,
+            destination,
+            connection_name.strip(),
+            "#A6ADC8",
+            self.map.current_layer)
 
         # Change status message
         self.status.config(
@@ -270,7 +359,150 @@ class AsterismGUI:
                  f"{destination.name}"
         )
 
+        self.selected_bubble = None
+
         self.draw_map()
+
+    # Double left click function call
+    #
+    def on_double_left_click(self, event):
+
+        self.click_count = 0  # reset click counter
+
+        self.status.config(
+            text="Double left click"
+        )
+
+        return
+
+    # Left click & hold function call
+    #
+    def on_left_hold(self, event):
+
+        # Reset click count, is_holding is set to true to prevent single/double click calls
+        self.is_holding = True
+        self.click_count = 0
+
+        self.status.config(
+            text="Hold left click"
+        )
+        return
+
+
+    # - Right Click Functions - #
+
+    # Right click hold checker - determines click type (single, double, hold)
+    def right_click_press(self, event):
+        # Reset variables
+        self.is_holding = False
+        if self.click_timer:
+            event.widget.after_cancel(self.click_timer)
+            self.click_timer = None
+
+        # Start a timer
+        self.hold_timer = self.root.after(self.HOLD_DELAY, lambda: self.on_right_hold(event))
+
+    # Right click single double checker - if hold method wasn't called,
+    # call single or double method
+    def right_click_release(self, event):
+        # Reset hold timer
+        if self.hold_timer:
+            self.root.after_cancel(self.hold_timer)
+            self.hold_timer = None
+
+        # If hold was called, return
+        if self.is_holding:
+            self.click_count = 0
+            return
+
+        # Count the amount of click releases within a small time period,
+        # then call single/double clicks
+        self.click_count += 1
+        if self.click_count == 1:
+            self.click_timer = self.root.after(self.DOUBLE_DELAY, lambda: self.on_right_click(event))
+        elif self.click_count > 1:
+            self.on_double_right_click(event)
+
+    # Single right click function call
+    # When you click on a thought, pull up thought menu*            *incomplete
+    def on_right_click(self, event):
+
+        self.click_count = 0  # reset click counter
+
+        self.status.config(
+            text="Single right click"
+        )
+
+        # Check for thought bubble
+        clicked = self.find_bubble_at(event.x, event.y)
+        if clicked is None:
+            return
+
+        self.draw_map()
+
+        xval = clicked.xpos + 65
+        yval = clicked.ypos -50
+
+        self.thought_menu.place(x= xval, y= yval)
+
+        #tester Method
+        # self.menu(self.canvas,
+        #           xval,
+        #           yval,
+        #           fill="white",
+        #           outline="red",
+        #           width=1)
+
+    # Double right click function call
+    #
+    def on_double_right_click(self, event):
+
+        self.click_count = 0  # reset click counter
+
+        self.status.config(
+            text="Double right click"
+        )
+
+        return
+
+    # Right click & hold function call
+    #
+    def on_right_hold(self, event):
+
+        # Reset click count, is_holding is set to true to prevent single/double click calls
+        self.is_holding = True
+        self.click_count = 0
+
+        self.status.config(
+            text="Hold right click"
+        )
+        return
+
+    # Focus function should show all connections for the selected thought.
+    # Other connections should be transparent
+    def focus_thought(self):
+        #stub
+        return
+
+    # Hides thought menu
+    def dismiss_menu(self, event):
+        self.draw_map()
+
+        self.thought_menu.place_forget()
+
+
+    # Test Method for placing polygons
+    # def menu(self, canvas, x, y, **kwargs):
+    #
+    #     points = [x,
+    #               y,
+    #               x+200,
+    #               y,
+    #               x+200,
+    #               y+200,
+    #               x,
+    #               y+200]
+    #     self.canvas.create_polygon(points, **kwargs)
 
     # ------------------------------
     # CANCEL CONNECTION MODE
