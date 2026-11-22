@@ -18,10 +18,8 @@ class AsterismGUI:
         self.map = Asterism()
 
         # Connection creation state
-        self.connect_mode = False
         self.selected_bubble = None
-        # add multiple state check variable
-        self.mode = "idle"
+        self.last_click = None
         
         # Mouse click variables
         self.click_timer = None
@@ -73,12 +71,6 @@ class AsterismGUI:
             text="+ Add Thought",
             command=self.add_bubble
         ).pack(side="left", padx=10, pady=8)
-
-        tk.Button(
-            toolbar,
-            text="Connect Thoughts",
-            command=self.start_connection
-        ).pack(side="left", padx=5, pady=8)
 
         tk.Button(
             toolbar,
@@ -149,7 +141,7 @@ class AsterismGUI:
 
         # ------------------------------
         # Thought Option Menu
-        # This menu pulls up when you click on a thought
+        # This menu pulls up when you right click on a thought
         # ------------------------------
 
         self.thought_menu = tk.Frame(
@@ -159,16 +151,22 @@ class AsterismGUI:
         )
         self.thought_menu.place_forget()
 
-        focus = tk.Button(
+        focus_btn = tk.Button(
             self.thought_menu,
             text = "Focus",
             command = self.focus_thought,
         )
-        focus.pack(padx = 5, pady = 5)
+        focus_btn.pack(padx = 5, pady = 5)
+        del_btn = tk.Button(
+            self.thought_menu,
+            text="delete",
+            command=self.delete_thought,
+        )
+        del_btn.pack(padx=5)
 
         # Bind menu buttons to dismiss on middle/right click
-        focus.bind("<Button-2>", self.dismiss_menu)
-        focus.bind("<Button-3>", self.dismiss_menu)
+        focus_btn.bind("<Button-2>", self.reset_variables(""))
+        focus_btn.bind("<Button-3>", self.reset_variables(""))
 
         # ------------------------------
         # TEST DATA
@@ -211,21 +209,6 @@ class AsterismGUI:
         self.draw_map()
 
     # ------------------------------
-    # START CONNECTION MODE
-    # ------------------------------
-
-    def start_connection(self):
-
-        self.connect_mode = True
-        self.selected_bubble = None
-
-        self.status.config(
-            text="Select the SOURCE thought."
-        )
-
-        self.draw_map()
-
-    # ------------------------------
     # FIND BUBBLE UNDER MOUSE
     # ------------------------------
 
@@ -254,9 +237,49 @@ class AsterismGUI:
         self.coordinates.config(
             text=f"{event.x}, {event.y}"
         )
-    
-    
-    # - Left Click Functions - #
+        # If creating connection, draw line from selected bubble to cursor
+        if(self.last_click == "left_single" and self.selected_bubble):
+            # Redraw canvas, then create a line
+            self.draw_map()
+            self.canvas.create_line(
+                self.selected_bubble.xpos,
+                self.selected_bubble.ypos,
+                event.x,
+                event.y,
+                fill="#5C5F72",
+                width=2
+            )
+
+            self.bubble = self.selected_bubble
+
+            # Redraw bubble over line
+            self.canvas.create_oval(
+                self.bubble.xpos - self.bubble.width,
+                self.bubble.ypos - self.bubble.height,
+                self.bubble.xpos + self.bubble.width,
+                self.bubble.ypos + self.bubble.height,
+                fill=self.bubble.rgb,
+                outline="#F9E2AF",
+                width=5
+            )
+
+            # Redraw bubble name
+            self.canvas.create_text(
+                self.bubble.xpos,
+                self.bubble.ypos,
+                text=self.bubble.name,
+                fill="#CDD6F4",
+                font=("Arial", 11, "bold"),
+                width=85
+            )
+
+
+
+
+
+    # ------------------------------
+    # Left Click Checker
+    # ------------------------------
     
     # Left click hold checker - determines click type (single, double, hold)
     def left_click_press(self, event):
@@ -289,6 +312,9 @@ class AsterismGUI:
             self.on_double_left_click(event)
 
 
+    # ------------------------------
+    # Left Click Functions
+    # ------------------------------
 
     # Single left click function call
     # Allows for connection making.
@@ -296,9 +322,10 @@ class AsterismGUI:
 
         self.click_count = 0        # reset click counter
 
-        self.status.config(
-            text="Single left click"
-        )
+        # Resets all values if last click was not a left single click
+        if self.last_click != "left_single":
+            self.selected_bubble = None
+            self.reset_variables("left_single")
 
         # Check for thought bubble
         clicked = self.find_bubble_at(event.x, event.y)
@@ -389,7 +416,9 @@ class AsterismGUI:
         return
 
 
-    # - Right Click Functions - #
+    # ------------------------------
+    # Right Click Checker
+    # ------------------------------
 
     # Right click hold checker - determines click type (single, double, hold)
     def right_click_press(self, event):
@@ -423,6 +452,11 @@ class AsterismGUI:
         elif self.click_count > 1:
             self.on_double_right_click(event)
 
+
+    # ------------------------------
+    # Right Click Functions
+    # ------------------------------
+
     # Single right click function call
     # When you click on a thought, pull up thought menu*            *incomplete
     def on_right_click(self, event):
@@ -433,10 +467,14 @@ class AsterismGUI:
             text="Single right click"
         )
 
+        self.reset_variables("right_single")
+
         # Check for thought bubble
         clicked = self.find_bubble_at(event.x, event.y)
         if clicked is None:
             return
+
+        self.selected_bubble = clicked
 
         self.draw_map()
 
@@ -452,6 +490,7 @@ class AsterismGUI:
         #           fill="white",
         #           outline="red",
         #           width=1)
+        return
 
     # Double right click function call
     #
@@ -478,31 +517,6 @@ class AsterismGUI:
         )
         return
 
-    # Focus function should show all connections for the selected thought.
-    # Other connections should be transparent
-    def focus_thought(self):
-        #stub
-        return
-
-    # Hides thought menu
-    def dismiss_menu(self, event):
-        self.draw_map()
-
-        self.thought_menu.place_forget()
-
-
-    # Test Method for placing polygons
-    # def menu(self, canvas, x, y, **kwargs):
-    #
-    #     points = [x,
-    #               y,
-    #               x+200,
-    #               y,
-    #               x+200,
-    #               y+200,
-    #               x,
-    #               y+200]
-    #     self.canvas.create_polygon(points, **kwargs)
 
     # ------------------------------
     # CANCEL CONNECTION MODE
@@ -512,6 +526,7 @@ class AsterismGUI:
 
         self.connect_mode = False
         self.selected_bubble = None
+        self.draw_map
 
     # ------------------------------
     # DRAW MAP
@@ -593,6 +608,43 @@ class AsterismGUI:
                 font=("Arial", 11, "bold"),
                 width=85
             )
+
+    # ------------------------------
+    # Element Removal
+    # ------------------------------
+
+    # Deletes the selected bubble. This bubble
+    def delete_thought(self):
+        self.map.remove_bubble(self.selected_bubble)
+        self.selected_bubble = None
+        self.reset_variables("")
+
+    # ------------------------------
+    # Utility Methods
+    # ------------------------------
+
+    # Reset variable values if you use a different function midway
+    def reset_variables(self, mode):
+        if (mode != "left_single"):
+            ...
+        if (mode != "left_double"):
+            ...
+        if (mode != "left_hold"):
+            ...
+        if(mode != "right_single"):
+            self.thought_menu.place_forget()
+        if (mode != "right_double"):
+            ...
+        if (mode != "right_hold"):
+            ...
+        self.draw_map()
+        self.last_click = mode
+
+    # Focus function should show all connections for the selected thought.
+    # Other connections should be transparent
+    def focus_thought(self):
+        #stub
+        return
 
     def cycle_layer(self):
         if self.map.current_layer >= len(self.map.layer_names) - 1:

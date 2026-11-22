@@ -43,3 +43,15 @@ class Asterism:
     def add_layer(self, name):
         self.layer_names.append(name)
         self.current_layer = len(self.layer_names) - 1
+
+    # remove the given bubble and any related connections
+    def remove_bubble(self, bubble):
+        self.connections = [
+            Connection for Connection in self.connections
+            if Connection.node_one != bubble and Connection.node_two != bubble
+        ]
+        self.bubbles.remove(bubble)
+
+
+    def remove_connection(self, connection):
+        self.connections.remove(connection)
