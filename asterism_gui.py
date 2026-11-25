@@ -1,5 +1,6 @@
 import tkinter as tk
-from tkinter import simpledialog, messagebox, ttk
+from tkinter import simpledialog, messagebox
+import pyautogui as pg
 import math
 
 from asterism import Asterism
@@ -131,6 +132,7 @@ class AsterismGUI:
         # Mouse binds for single, double clicks, & hold for left clicks
         self.canvas.bind("<Button-1>", self.left_click_press)
         self.canvas.bind("<ButtonRelease-1>", self.left_click_release)
+        self.canvas.bind("<B1-Motion>", self.on_left_hold)
 
         # Mouse binds for single, double clicks, & hold for right clicks
         self.canvas.bind("<Button-3>", self.right_click_press)
@@ -165,16 +167,16 @@ class AsterismGUI:
         del_btn.pack(padx=5)
 
         # Bind menu buttons to dismiss on middle/right click
-        focus_btn.bind("<Button-2>", self.reset_variables(""))
-        focus_btn.bind("<Button-3>", self.reset_variables(""))
+        focus_btn.bind("<Button-2>", self.reset_variables(" "))
+        focus_btn.bind("<Button-3>", self.reset_variables(" "))
 
         # ------------------------------
         # TEST DATA
         # ------------------------------
 
-        self.map.add_bubble("Hello", "#45475a", 200, 150, 50, 50)
-        self.map.add_bubble("World", "#45475a", 500, 150, 50, 50)
-        self.map.add_bubble("Goodbye", "#45475a", 350, 400, 40, 50)
+        self.map.add_bubble("Hello", "#45475a", 200, 150, 48, 48)
+        self.map.add_bubble("World", "#45475a", 500, 150, 48, 48)
+        self.map.add_bubble("Goodbye", "#45475a", 350, 400, 48, 48)
 
         self.map.add_connection(self.map.bubbles[0], self.map.bubbles[1], "Winner", "#1C5FC9", 0)
         self.map.add_connection(self.map.bubbles[0], self.map.bubbles[2], "Tied", "#733572", 0)
@@ -186,49 +188,6 @@ class AsterismGUI:
         self.draw_map()
 
     # ------------------------------
-    # ADD BUBBLE
-    # ------------------------------
-
-    def add_bubble(self):
-
-        name = simpledialog.askstring(
-            "New Thought",
-            "Name your new thought:"
-        )
-
-        if not name or not name.strip():
-            return
-
-        index = len(self.map.bubbles)
-
-        x = 150 + (index % 4) * 200
-        y = 150 + (index // 4) * 150
-
-        self.map.add_bubble(name, "#45475A", x, y, 50, 50)
-
-        self.draw_map()
-
-    # ------------------------------
-    # FIND BUBBLE UNDER MOUSE
-    # ------------------------------
-
-    def find_bubble_at(self, x, y):
-
-        radius = 48
-
-        for bubble in reversed(self.map.bubbles):
-
-            distance = math.hypot(
-                x - bubble.xpos,
-                y - bubble.ypos
-            )
-
-            if distance <= radius:
-                return bubble
-
-        return None
-
-    # ------------------------------
     # HANDLE CANVAS CLICK
     # ------------------------------
 
@@ -238,7 +197,7 @@ class AsterismGUI:
             text=f"{event.x}, {event.y}"
         )
         # If creating connection, draw line from selected bubble to cursor
-        if(self.last_click == "left_single" and self.selected_bubble):
+        if self.last_click == "left_single" and self.selected_bubble:
             # Redraw canvas, then create a line
             self.draw_map()
             self.canvas.create_line(
@@ -250,24 +209,24 @@ class AsterismGUI:
                 width=2
             )
 
-            self.bubble = self.selected_bubble
+            bubble = self.selected_bubble
 
             # Redraw bubble over line
             self.canvas.create_oval(
-                self.bubble.xpos - self.bubble.width,
-                self.bubble.ypos - self.bubble.height,
-                self.bubble.xpos + self.bubble.width,
-                self.bubble.ypos + self.bubble.height,
-                fill=self.bubble.rgb,
+                bubble.xpos - bubble.width,
+                bubble.ypos - bubble.height,
+                bubble.xpos + bubble.width,
+                bubble.ypos + bubble.height,
+                fill=bubble.rgb,
                 outline="#F9E2AF",
                 width=5
             )
 
             # Redraw bubble name
             self.canvas.create_text(
-                self.bubble.xpos,
-                self.bubble.ypos,
-                text=self.bubble.name,
+                bubble.xpos,
+                bubble.ypos,
+                text=bubble.name,
                 fill="#CDD6F4",
                 font=("Arial", 11, "bold"),
                 width=85
@@ -290,7 +249,15 @@ class AsterismGUI:
             self.click_timer = None
         
         # Start a timer
-        self.hold_timer = self.root.after(self.HOLD_DELAY, lambda: self.on_left_hold(event))
+        self.hold_timer = self.root.after(self.HOLD_DELAY, lambda: self.set_holding(event, True))
+
+    # Set is_holding to True, allowing left click motions
+    def set_holding(self, event, hold):
+        clicked = self.find_bubble_at(event.x, event.y, 48)
+        if clicked:
+            self.selected_bubble = clicked
+            self.is_holding = hold
+
 
     # Left click single double checker - if hold method wasn't called,
     # call single or double method
@@ -300,9 +267,32 @@ class AsterismGUI:
             self.root.after_cancel(self.hold_timer)
             self.hold_timer = None
 
-        # If hold was called, return
+        # If hold was called: place bubble, then return
         if self.is_holding:
+
+            # Check drop location
+            clicked = self.find_other_bubble_at(event.x, event.y, 192, self.selected_bubble)
+
+            # Set bubble location if drop location is not too close to another bubble
+            # Change status if drop fails
+            if clicked is None or clicked is self.selected_bubble:
+                self.selected_bubble.xpos = event.x
+                self.selected_bubble.ypos = event.y
+                self.status.config(
+                    text=f"Movement of {self.selected_bubble.name} completed."
+                )
+            else:
+                self.status.config(
+                    text=f"Movement of {self.selected_bubble.name} canceled: too close to another thought."
+                )
+            # Reset Variables
+            self.selected_bubble = None
             self.click_count = 0
+            self.is_holding = False
+
+            # Redraw
+            self.draw_map()
+
             return
 
         self.click_count += 1
@@ -328,7 +318,7 @@ class AsterismGUI:
             self.reset_variables("left_single")
 
         # Check for thought bubble
-        clicked = self.find_bubble_at(event.x, event.y)
+        clicked = self.find_bubble_at(event.x, event.y, 48)
 
         if clicked is None:
             return
@@ -357,7 +347,7 @@ class AsterismGUI:
                 "A thought cannot connect to itself."
             )
 
-            self.cancel_connection()
+            self.reset_variables("")
             return
 
         # Ask user to name connection
@@ -369,7 +359,7 @@ class AsterismGUI:
 
         # Check if entered name is empty
         if not connection_name or not connection_name.strip():
-            self.cancel_connection()
+            self.reset_variables("")
             return
 
         # Create connection
@@ -391,7 +381,7 @@ class AsterismGUI:
         self.draw_map()
 
     # Double left click function call
-    #
+    # Create bubble at that location. Will cancel if too close to another thought.
     def on_double_left_click(self, event):
 
         self.click_count = 0  # reset click counter
@@ -399,20 +389,63 @@ class AsterismGUI:
         self.status.config(
             text="Double left click"
         )
+        self.reset_variables("left_double")
+
+
+        # Check if spot is empty -> not too near other bubbles
+        clicked = self.find_bubble_at(event.x, event.y, 192)
+        if clicked:
+            self.status.config(
+                text="Could not create thought: Too close to another thought."
+            )
+            return
+
+        # Prompt bubble name
+        name = simpledialog.askstring(
+            "New Thought",
+            "Name your new thought:"
+        )
+
+        if not name or not name.strip():
+            return
+
+        # Draw bubble
+        self.map.add_bubble(name, "#45475A", event.x, event.y, 48, 48)
+
+        self.draw_map()
 
         return
 
     # Left click & hold function call
-    #
+    # Uses its own button bind. Allows moving thoughts.
     def on_left_hold(self, event):
-
-        # Reset click count, is_holding is set to true to prevent single/double click calls
-        self.is_holding = True
-        self.click_count = 0
 
         self.status.config(
             text="Hold left click"
         )
+        self.reset_variables("left_hold")
+
+        # Change thought to end location
+        if not self.is_holding:
+            return
+
+        # Draw bubble placement and minimum distance ring
+        else:
+            # Placement ring
+            self.canvas.create_oval(
+                event.x - 144, event.y - 144,
+                event.x + 144, event.y + 144,
+                fill="#799ED9"
+            )
+
+            self.canvas.create_oval(
+                event.x - 48, event.y - 48,
+                event.x + 48, event.y + 48,
+                fill="#9DA4B0",
+                outline="#89B4FA",
+                width=3
+            )
+
         return
 
 
@@ -470,7 +503,7 @@ class AsterismGUI:
         self.reset_variables("right_single")
 
         # Check for thought bubble
-        clicked = self.find_bubble_at(event.x, event.y)
+        clicked = self.find_bubble_at(event.x, event.y, 48)
         if clicked is None:
             return
 
@@ -517,16 +550,76 @@ class AsterismGUI:
         )
         return
 
+    # ------------------------------
+    # ADD BUBBLE
+    # ------------------------------
+
+    def add_bubble(self):
+
+        name = simpledialog.askstring(
+            "New Thought",
+            "Name your new thought:"
+        )
+
+        if not name or not name.strip():
+            return
+
+        index = len(self.map.bubbles)
+
+        x = 150 + (index % 4) * 200
+        y = 150 + (index // 4) * 150
+
+        self.map.add_bubble(name, "#45475A", x, y, 50, 50)
+
+        self.draw_map()
 
     # ------------------------------
-    # CANCEL CONNECTION MODE
+    # FIND BUBBLE UNDER MOUSE
     # ------------------------------
 
-    def cancel_connection(self):
+    # Find the bubble nearest the mouse within a given radius
+    def find_bubble_at(self, x, y, radius):
 
-        self.connect_mode = False
-        self.selected_bubble = None
-        self.draw_map
+        greatest_distance = radius + 1
+        closest_bubble = None
+
+        # Radius standard is 48, though it may be increased if you want to avoid being too close
+        for bubble in reversed(self.map.bubbles):
+
+            # Get distance
+            distance = math.hypot(
+                x - bubble.xpos, y - bubble.ypos
+            )
+
+            # Find the shortest distance within the radius
+            if distance <= radius and distance < greatest_distance:
+                greatest_distance = distance
+                closest_bubble = bubble
+
+        return closest_bubble
+
+    # Alternate version of the method that will not return a given bubble under any circumstance.
+    # This is used for when moving a thought.
+    def find_other_bubble_at(self, x, y, radius, current_bubble):
+
+        greatest_distance = radius + 1
+        closest_bubble = None
+
+        # Radius standard is 48, though it may be increased if you want to avoid being too close
+        for bubble in reversed(self.map.bubbles):
+
+            if bubble is not current_bubble:
+                # Get distance
+                distance = math.hypot(
+                    x - bubble.xpos, y - bubble.ypos
+                )
+
+                # Find the shortest distance within the radius
+                if distance <= radius and distance < greatest_distance:
+                    greatest_distance = distance
+                    closest_bubble = bubble
+
+        return closest_bubble
 
     # ------------------------------
     # DRAW MAP
@@ -624,19 +717,9 @@ class AsterismGUI:
     # ------------------------------
 
     # Reset variable values if you use a different function midway
-    def reset_variables(self, mode):
-        if (mode != "left_single"):
-            ...
-        if (mode != "left_double"):
-            ...
-        if (mode != "left_hold"):
-            ...
-        if(mode != "right_single"):
-            self.thought_menu.place_forget()
-        if (mode != "right_double"):
-            ...
-        if (mode != "right_hold"):
-            ...
+    # This function needs a bit of a rework. Don't mind it yet.
+    def reset_variables(self, mode: str):
+        self.thought_menu.place_forget()
         self.draw_map()
         self.last_click = mode
 
