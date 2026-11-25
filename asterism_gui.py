@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+from tkinter import simpledialog, messagebox, ttk
 import math
 
 from asterism import Asterism
@@ -27,8 +27,48 @@ class AsterismGUI:
         self.is_holding = False
         self.click_count = 0
         # Mouse timings
-        self.HOLD_DELAY = 400
+        self.HOLD_DELAY = 250
         self.DOUBLE_DELAY = 200
+
+        self.color = "#CDD6FE"
+
+        # ------------------------------
+        # Style Options
+        # ------------------------------
+
+        # Setup style
+        self.style = ttk.Style()
+        self.style.theme_use("clam")
+
+        #-- Standard Button Styling --#
+        self.style.configure(
+            "TButton",
+            font= ("Arial", 10),
+            relief= "flat",
+            foreground= "#CDD6FE",
+            background= "#1E1E2E",
+            width= 10,
+            padding= 2
+        )
+        self.style.map(
+            'TButton',
+            relief = [("pressed", "flat")],
+            foreground = [("pressed", "#1E1E2E")],
+            background = [("pressed", "#CDD6FE")],
+        )
+
+        #-- Delete Button --#
+        self.style.configure(
+            "Delete.TButton",
+            foreground = "#E3C5BF",
+            background = "#AB3318",
+        )
+        self.style.map(
+            'Delete.TButton',
+            foreground = [("pressed", "#F5F5F5")],
+            background = [("pressed", "#FF4117")],
+        )
+
 
         # ------------------------------
         # HEADER
@@ -39,7 +79,7 @@ class AsterismGUI:
 
         title = tk.Label(
             header,
-            text="ThoughtMap",
+            text="Concept Asterism",
             font=("Arial", 22, "bold"),
             fg="#cdd6f4",
             bg="#181825"
@@ -54,7 +94,7 @@ class AsterismGUI:
             bg = "#181825",
             justify = "center"
         )
-        self.layer_title.pack(side="left", padx=20, pady=12)
+        self.layer_title.pack(side="left", padx=250, pady=12)
 
         # ------------------------------
         # TOOLBAR
@@ -65,12 +105,6 @@ class AsterismGUI:
 
         toolbar = tk.Frame(root, bg="#313244", height=50)
         toolbar.pack(fill="x")
-
-        tk.Button(
-            toolbar,
-            text="+ Add Thought",
-            command=self.add_bubble
-        ).pack(side="left", padx=10, pady=8)
 
         tk.Button(
             toolbar,
@@ -101,7 +135,7 @@ class AsterismGUI:
 
         self.coordinates = tk.Label(
             statusbar,
-            text="400,300",
+            text="0,0",
             fg="#cdd6f4",
             bg="#313244"
         )
@@ -147,45 +181,76 @@ class AsterismGUI:
 
         self.thought_menu = tk.Frame(
             self.canvas,
-            width = 20,
+            bg="#313244",
+            highlightbackground="#CDD6FE",
+            highlightthickness=2,
+            width = 500,
             height = 10,
         )
         self.thought_menu.place_forget()
 
-        focus_btn = tk.Button(
+        # Allows you to rename thought
+        tem_btn = ttk.Button(
             self.thought_menu,
-            text = "Focus",
-            command = self.focus_thought,
+            text="Rename",
+            #command=self.bubble_rename,
+            takefocus= False
         )
-        focus_btn.pack(padx = 5, pady = 5)
-        del_btn = tk.Button(
-            self.thought_menu,
-            text="delete",
-            command=self.delete_thought,
-        )
-        del_btn.pack(padx=5)
+        tem_btn.grid(row=0, column=0, padx = 4, pady = 4, sticky="w")
 
-        # Bind menu buttons to dismiss on middle/right click
-        focus_btn.bind("<Button-2>", self.reset_variables(" "))
-        focus_btn.bind("<Button-3>", self.reset_variables(" "))
+        # Focus on this thought, revealing all connections splayed out. stub
+        focus_btn = ttk.Button(
+            self.thought_menu,
+            text= "Focus",
+            command= self.focus_thought,
+            takefocus= False
+        )
+        focus_btn.grid(row=0, column=1, padx = (0, 4), pady = 4, sticky="w")
+
+        # Allows customization of thought color
+        hes_btn = ttk.Button(
+            self.thought_menu,
+            text="Recolor",
+            #command=self.bubble_recolor,
+            takefocus= False
+        )
+        hes_btn.grid(row= 1, column= 0, padx = 4, pady = (0, 4), sticky="ew")
+
+        # Deletes this thought, will add a confirmation prompt later
+        del_btn = ttk.Button(
+            self.thought_menu,
+            text="Delete",
+            command=self.delete_thought,
+            takefocus= False,
+            style="Delete.TButton"
+        )
+        del_btn.grid(row=1, column=1, padx = (0, 4), pady = (0, 4), sticky="ew")
+
+
+        # Text box for a thoughts description/details
+        self.description_text = tk.Text(self.thought_menu, width= 20, height=7, wrap="word", takefocus= False)
+        self.description_text.grid(row= 2,column= 0, columnspan= 2, pady= (0, 4))
+
+        # Bind key release to save text
+        self.description_text.bind("<KeyRelease>", self.update_desc)
 
         # ------------------------------
         # TEST DATA
         # ------------------------------
 
-        self.map.add_bubble("Hello", "#45475a", 200, 150, 48, 48)
-        self.map.add_bubble("World", "#45475a", 500, 150, 48, 48)
-        self.map.add_bubble("Goodbye", "#45475a", 350, 400, 48, 48)
+        self.map.add_bubble("Hello", "#45475a", "wow", 200, 150, 48, 48)
+        self.map.add_bubble("World", "#45475a", "bop", 500, 150, 48, 48)
+        self.map.add_bubble("Goodbye", "#45475a", "sick", 350, 400, 48, 48)
 
         self.map.add_connection(self.map.bubbles[0], self.map.bubbles[1], "Winner", "#1C5FC9", 0)
         self.map.add_connection(self.map.bubbles[0], self.map.bubbles[2], "Tied", "#733572", 0)
         self.map.add_connection(self.map.bubbles[1], self.map.bubbles[2], "Lost", "#387A31", 0)
         self.map.add_connection(self.map.bubbles[0], self.map.bubbles[2], "Undecided", "#9C845C", 1)
 
-        self.map.add_layer("tester")
+        self.map.add_layer("Tester")
 
         self.draw_map()
-
+        
     # ------------------------------
     # HANDLE CANVAS CLICK
     # ------------------------------
@@ -282,7 +347,7 @@ class AsterismGUI:
                 )
             else:
                 self.status.config(
-                    text=f"Movement of {self.selected_bubble.name} canceled: too close to another thought."
+                    text=f"Movement of {self.selected_bubble.name} canceled: too close to {clicked.name}."
                 )
             # Reset Variables
             self.selected_bubble = None
@@ -365,7 +430,7 @@ class AsterismGUI:
         self.map.add_connection(
             source,
             destination,
-            connection_name.strip(),
+            connection_name.strip().capitalize(),
             "#A6ADC8",
             self.map.current_layer)
 
@@ -395,7 +460,7 @@ class AsterismGUI:
         clicked = self.find_bubble_at(event.x, event.y, 192)
         if clicked:
             self.status.config(
-                text="Could not create thought: Too close to another thought."
+                text=f"Could not create thought: Too close to {clicked.name}."
             )
             return
 
@@ -409,7 +474,7 @@ class AsterismGUI:
             return
 
         # Draw bubble
-        self.map.add_bubble(name, "#45475A", event.x, event.y, 48, 48)
+        self.map.add_bubble(name.capitalize(), "#45475A", "Base Thought", event.x, event.y, 48, 48)
 
         self.draw_map()
 
@@ -514,15 +579,8 @@ class AsterismGUI:
         yval = clicked.ypos -50
 
         self.thought_menu.place(x= xval, y= yval)
-
-        #tester Method
-        # self.menu(self.canvas,
-        #           xval,
-        #           yval,
-        #           fill="white",
-        #           outline="red",
-        #           width=1)
-        return
+        self.description_text.delete("1.0", "end")
+        self.description_text.insert("1.0", self.selected_bubble.description)
 
     # Double right click function call
     #
@@ -550,27 +608,8 @@ class AsterismGUI:
         return
 
     # ------------------------------
-    # ADD BUBBLE
+    # ADD BUBBLE  -Redacted
     # ------------------------------
-
-    def add_bubble(self):
-
-        name = simpledialog.askstring(
-            "New Thought",
-            "Name your new thought:"
-        )
-
-        if not name or not name.strip():
-            return
-
-        index = len(self.map.bubbles)
-
-        x = 150 + (index % 4) * 200
-        y = 150 + (index // 4) * 150
-
-        self.map.add_bubble(name, "#45475A", x, y, 50, 50)
-
-        self.draw_map()
 
     # ------------------------------
     # FIND BUBBLE UNDER MOUSE
@@ -664,7 +703,7 @@ class AsterismGUI:
                     midpoint_y,
                     text=connection.name,
                     fill="#a6adc8",
-                    font=("Arial", 14)
+                    font=("Arial", 11, "bold")
                 )
 
         # Draw thought bubbles
@@ -714,6 +753,10 @@ class AsterismGUI:
     # ------------------------------
     # Utility Methods
     # ------------------------------
+
+    # Change description of a given thought on keystroke
+    def update_desc(self, event):
+        self.selected_bubble.description = self.description_text.get("1.0", "end-1c")
 
     # Reset variable values if you use a different function midway
     # This function needs a bit of a rework. Don't mind it yet.
