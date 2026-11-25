@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import simpledialog, messagebox
-import pyautogui as pg
 import math
 
 from asterism import Asterism
