@@ -1,73 +1,64 @@
-import tkinter as tk
-from tkinter import simpledialog, messagebox, ttk
+import time
 import math
+import tkinter as tk
+from tkinter import simpledialog, messagebox
 
 from asterism import Asterism
+from asterism_btns import AsterismBtns
 
 
 class AsterismGUI:
 
     def __init__(self, root):
 
+        # Window attributes
         self.root = root
         self.root.title("Asterism")
         self.root.geometry("1100x700")
         self.root.minsize(600,450)
         self.root.configure(bg="#1e1e2e")
 
+        # Asterism Object
         self.map = Asterism()
 
-        # Connection creation state
+        # Draw Loop variables
+        self.running = True
+        self.last_frame = 0
+        self.frame_interval = 16        # 1000/interval = fps
+
+        # Bubble and connection ID
+        self.bubble_id = {}
+        self.connection_id = {}
+
+        # variables for temp line and placement ring
+        self.connection_line = None
+        self.placement_guide = {}
+
+        # Selected bubble for various use applications
         self.selected_bubble = None
+        self.selected_connection = None
         self.last_click = None
         
         # Mouse click variables
-        self.click_timer = None
-        self.hold_timer = None
-        self.is_holding = False
-        self.click_count = 0
+        self.left_click_timer = None
+        self.left_hold_timer = None
+        self.left_is_holding = False
+        self.left_click_count = 0
+
+        self.right_click_timer = None
+        self.right_hold_timer = None
+        self.right_is_holding = False
+        self.right_click_count = 0
+
+
         # Mouse timings
         self.HOLD_DELAY = 250
         self.DOUBLE_DELAY = 200
+        # Mouse coordinates
+        self.mouse_x = 0
+        self.mouse_y = 0
 
         self.color = "#CDD6FE"
-
-        # ------------------------------
-        # Style Options
-        # ------------------------------
-
-        # Setup style
-        self.style = ttk.Style()
-        self.style.theme_use("clam")
-
-        #-- Standard Button Styling --#
-        self.style.configure(
-            "TButton",
-            font= ("Arial", 10),
-            relief= "flat",
-            foreground= "#CDD6FE",
-            background= "#1E1E2E",
-            width= 10,
-            padding= 2
-        )
-        self.style.map(
-            'TButton',
-            relief = [("pressed", "flat")],
-            foreground = [("pressed", "#1E1E2E")],
-            background = [("pressed", "#CDD6FE")],
-        )
-
-        #-- Delete Button --#
-        self.style.configure(
-            "Delete.TButton",
-            foreground = "#E3C5BF",
-            background = "#AB3318",
-        )
-        self.style.map(
-            'Delete.TButton',
-            foreground = [("pressed", "#F5F5F5")],
-            background = [("pressed", "#FF4117")],
-        )
 
 
         # ------------------------------
@@ -159,6 +150,45 @@ class AsterismGUI:
         )
 
         # ------------------------------
+        # MENUS
+        # ------------------------------
+
+        # Creates button layouts when modifying either a bubble or connection
+        self.menus = AsterismBtns(self)
+
+        # ------------------------------
+        # Temporary canvas objects
+        # ------------------------------
+
+        self.connection_line = self.canvas.create_line(
+            0,0,0,0,
+            fill = "#5C5F72",
+            width = 2,
+            state = "hidden"
+        )
+
+
+        placement_ring = self.canvas.create_oval(
+            0, 0, 0, 0,
+            fill = "#799ED9",
+            state = "hidden"
+        )
+        inner_bubble = self.canvas.create_oval(
+            0, 0, 0, 0,
+            fill = "#9DA4B0",
+            outline = "#89B4FA",
+            width = 3,
+            state = "hidden"
+        )
+
+        self.placement_guide = {
+            "pr": placement_ring,
+            "inner": inner_bubble
+        }
+
+
+
+        # ------------------------------
         # Button Binds
         # ------------------------------
 
@@ -170,86 +200,31 @@ class AsterismGUI:
         # Mouse binds for single, double clicks, & hold for right clicks
         self.canvas.bind("<Button-3>", self.right_click_press)
         self.canvas.bind("<ButtonRelease-3>", self.right_click_release)
+        self.canvas.bind("<B3-Motion>", self.on_right_hold)
 
         # Binds mouse movements to check for mouse coordinates
         self.canvas.bind("<Motion>", self.on_mouse_move)
 
-        # ------------------------------
-        # Thought Option Menu
-        # This menu pulls up when you right click on a thought
-        # ------------------------------
-
-        self.thought_menu = tk.Frame(
-            self.canvas,
-            bg="#313244",
-            highlightbackground="#CDD6FE",
-            highlightthickness=2,
-            width = 500,
-            height = 10,
-        )
-        self.thought_menu.place_forget()
-
-        # Allows you to rename thought
-        tem_btn = ttk.Button(
-            self.thought_menu,
-            text="Rename",
-            #command=self.bubble_rename,
-            takefocus= False
-        )
-        tem_btn.grid(row=0, column=0, padx = 4, pady = 4, sticky="w")
-
-        # Focus on this thought, revealing all connections splayed out. stub
-        focus_btn = ttk.Button(
-            self.thought_menu,
-            text= "Focus",
-            command= self.focus_thought,
-            takefocus= False
-        )
-        focus_btn.grid(row=0, column=1, padx = (0, 4), pady = 4, sticky="w")
-
-        # Allows customization of thought color
-        hes_btn = ttk.Button(
-            self.thought_menu,
-            text="Recolor",
-            #command=self.bubble_recolor,
-            takefocus= False
-        )
-        hes_btn.grid(row= 1, column= 0, padx = 4, pady = (0, 4), sticky="ew")
-
-        # Deletes this thought, will add a confirmation prompt later
-        del_btn = ttk.Button(
-            self.thought_menu,
-            text="Delete",
-            command=self.delete_thought,
-            takefocus= False,
-            style="Delete.TButton"
-        )
-        del_btn.grid(row=1, column=1, padx = (0, 4), pady = (0, 4), sticky="ew")
-
-
-        # Text box for a thoughts description/details
-        self.description_text = tk.Text(self.thought_menu, width= 20, height=7, wrap="word", takefocus= False)
-        self.description_text.grid(row= 2,column= 0, columnspan= 2, pady= (0, 4))
-
-        # Bind key release to save text
-        self.description_text.bind("<KeyRelease>", self.update_desc)
 
         # ------------------------------
         # TEST DATA
         # ------------------------------
 
-        self.map.add_bubble("Hello", "#45475a", "wow", 200, 150, 48, 48)
-        self.map.add_bubble("World", "#45475a", "bop", 500, 150, 48, 48)
-        self.map.add_bubble("Goodbye", "#45475a", "sick", 350, 400, 48, 48)
+        self.map.add_bubble("Hello", "#45475a", "wow", 200, 150, 48)
+        self.map.add_bubble("World", "#45475a", "bop", 500, 150, 48)
+        self.map.add_bubble("Goodbye", "#45475a", "sick", 350, 400, 48)
 
         self.map.add_connection(self.map.bubbles[0], self.map.bubbles[1], "Winner", "#1C5FC9", 0)
         self.map.add_connection(self.map.bubbles[0], self.map.bubbles[2], "Tied", "#733572", 0)
         self.map.add_connection(self.map.bubbles[1], self.map.bubbles[2], "Lost", "#387A31", 0)
         self.map.add_connection(self.map.bubbles[0], self.map.bubbles[2], "Undecided", "#9C845C", 1)
 
+        self.map.connections[0].x = 300
+        self.map.connections[0].y = 200
+
         self.map.add_layer("Tester")
 
-        self.draw_map()
+        self.start_cycle()
         
     # ------------------------------
     # HANDLE CANVAS CLICK
@@ -257,47 +232,11 @@ class AsterismGUI:
 
     # Checks coordinates of mouse
     def on_mouse_move(self, event):
+        self.mouse_x = event.x
+        self.mouse_y = event.y
         self.coordinates.config(
-            text=f"{event.x}, {event.y}"
+            text=f"{self.mouse_x}, {self.mouse_y}"
         )
-        # If creating connection, draw line from selected bubble to cursor
-        if self.last_click == "left_single" and self.selected_bubble:
-            # Redraw canvas, then create a line
-            self.draw_map()
-            self.canvas.create_line(
-                self.selected_bubble.xpos,
-                self.selected_bubble.ypos,
-                event.x,
-                event.y,
-                fill="#5C5F72",
-                width=2
-            )
-
-            bubble = self.selected_bubble
-
-            # Redraw bubble over line
-            self.canvas.create_oval(
-                bubble.xpos - bubble.width,
-                bubble.ypos - bubble.height,
-                bubble.xpos + bubble.width,
-                bubble.ypos + bubble.height,
-                fill=bubble.rgb,
-                outline="#F9E2AF",
-                width=5
-            )
-
-            # Redraw bubble name
-            self.canvas.create_text(
-                bubble.xpos,
-                bubble.ypos,
-                text=bubble.name,
-                fill="#CDD6F4",
-                font=("Arial", 11, "bold"),
-                width=85
-            )
-
-
-
 
 
     # ------------------------------
@@ -307,41 +246,52 @@ class AsterismGUI:
     # Left click hold checker - determines click type (single, double, hold)
     def left_click_press(self, event):
         # Reset variables
-        self.is_holding = False
-        if self.click_timer:
-            event.widget.after_cancel(self.click_timer)
-            self.click_timer = None
+        self.left_is_holding = False
+        if self.left_click_timer:
+            event.widget.after_cancel(self.left_click_timer)
+            self.left_click_timer = None
         
         # Start a timer
-        self.hold_timer = self.root.after(self.HOLD_DELAY, lambda: self.set_holding(event, True))
+        self.left_hold_timer = self.root.after(self.HOLD_DELAY, lambda: self.set_left_holding(event, True))
 
-    # Set is_holding to True, allowing left click motions
-    def set_holding(self, event, hold):
-        clicked = self.find_bubble_at(event.x, event.y, 48)
+    # Set left_is_holding to True, allowing left click motions
+    def set_left_holding(self, event, hold):
+        self.status.config(
+            text="Hold left click"
+        )
+        self.reset_variables("left_hold")
+
+        clicked = self.find_bubble_at(event.x, event.y, 48, True)
         if clicked:
             self.selected_bubble = clicked
-            self.is_holding = hold
+            self.left_is_holding = hold
 
 
     # Left click single double checker - if hold method wasn't called,
     # call single or double method
     def left_click_release(self, event):
         # Reset hold timer
-        if self.hold_timer:
-            self.root.after_cancel(self.hold_timer)
-            self.hold_timer = None
+        if self.left_hold_timer:
+            self.root.after_cancel(self.left_hold_timer)
+            self.left_hold_timer = None
 
         # If hold was called: place bubble, then return
-        if self.is_holding:
+        if self.left_is_holding:
 
             # Check drop location
-            clicked = self.find_other_bubble_at(event.x, event.y, 192, self.selected_bubble)
+            clicked = self.find_bubble_at(event.x, event.y, 192, False)
 
             # Set bubble location if drop location is not too close to another bubble
             # Change status if drop fails
             if clicked is None or clicked is self.selected_bubble:
-                self.selected_bubble.xpos = event.x
-                self.selected_bubble.ypos = event.y
+                self.selected_bubble.x = event.x
+                self.selected_bubble.y = event.y
+
+                # Reset the midpoint of all connections linked to this thought
+                for connection in self.map.connections:
+                    if connection.node_one == self.selected_bubble or connection.node_two == self.selected_bubble:
+                        connection.reset_midpoint()
+
                 self.status.config(
                     text=f"Movement of {self.selected_bubble.name} completed."
                 )
@@ -351,18 +301,15 @@ class AsterismGUI:
                 )
             # Reset Variables
             self.selected_bubble = None
-            self.click_count = 0
-            self.is_holding = False
-
-            # Redraw
-            self.draw_map()
+            self.left_click_count = 0
+            self.left_is_holding = False
 
             return
 
-        self.click_count += 1
-        if self.click_count == 1:
-            self.click_timer = self.root.after(self.DOUBLE_DELAY, lambda: self.on_left_click(event))
-        elif self.click_count > 1:
+        self.left_click_count += 1
+        if self.left_click_count == 1:
+            self.left_click_timer = self.root.after(self.DOUBLE_DELAY, lambda: self.on_left_click(event))
+        elif self.left_click_count > 1:
             self.on_double_left_click(event)
 
 
@@ -374,7 +321,7 @@ class AsterismGUI:
     # Allows for connection making.
     def on_left_click(self, event):
 
-        self.click_count = 0        # reset click counter
+        self.left_click_count = 0        # reset click counter
 
         # Resets all values if last click was not a left single click
         if self.last_click != "left_single":
@@ -382,9 +329,10 @@ class AsterismGUI:
             self.reset_variables("left_single")
 
         # Check for thought bubble
-        clicked = self.find_bubble_at(event.x, event.y, 48)
+        clicked = self.find_bubble_at(event.x, event.y, 48, True)
 
         if clicked is None:
+            self.reset_variables("left_single")
             return
 
         # First click: select source
@@ -395,8 +343,6 @@ class AsterismGUI:
                 text=f"Source: {clicked.name}. "
                      "Now select the DESTINATION thought."
             )
-
-            self.draw_map()
 
             return
 
@@ -442,13 +388,11 @@ class AsterismGUI:
 
         self.selected_bubble = None
 
-        self.draw_map()
-
     # Double left click function call
     # Create bubble at that location. Will cancel if too close to another thought.
     def on_double_left_click(self, event):
 
-        self.click_count = 0  # reset click counter
+        self.left_click_count = 0  # reset click counter
 
         self.status.config(
             text="Double left click"
@@ -457,7 +401,7 @@ class AsterismGUI:
 
 
         # Check if spot is empty -> not too near other bubbles
-        clicked = self.find_bubble_at(event.x, event.y, 192)
+        clicked = self.find_bubble_at(event.x, event.y, 192, True)
         if clicked:
             self.status.config(
                 text=f"Could not create thought: Too close to {clicked.name}."
@@ -474,9 +418,7 @@ class AsterismGUI:
             return
 
         # Draw bubble
-        self.map.add_bubble(name.capitalize(), "#45475A", "Base Thought", event.x, event.y, 48, 48)
-
-        self.draw_map()
+        self.map.add_bubble(name.capitalize(), "#45475A", "Base Thought", event.x, event.y, 48)
 
         return
 
@@ -484,31 +426,11 @@ class AsterismGUI:
     # Uses its own button bind. Allows moving thoughts.
     def on_left_hold(self, event):
 
-        self.status.config(
-            text="Hold left click"
+        self.mouse_x = event.x
+        self.mouse_y = event.y
+        self.coordinates.config(
+            text=f"{self.mouse_x}, {self.mouse_y}"
         )
-        self.reset_variables("left_hold")
-
-        # Change thought to end location
-        if not self.is_holding:
-            return
-
-        # Draw bubble placement and minimum distance ring
-        else:
-            # Placement ring
-            self.canvas.create_oval(
-                event.x - 144, event.y - 144,
-                event.x + 144, event.y + 144,
-                fill="#799ED9"
-            )
-
-            self.canvas.create_oval(
-                event.x - 48, event.y - 48,
-                event.x + 48, event.y + 48,
-                fill="#9DA4B0",
-                outline="#89B4FA",
-                width=3
-            )
 
         return
 
@@ -520,33 +442,45 @@ class AsterismGUI:
     # Right click hold checker - determines click type (single, double, hold)
     def right_click_press(self, event):
         # Reset variables
-        self.is_holding = False
-        if self.click_timer:
-            event.widget.after_cancel(self.click_timer)
-            self.click_timer = None
+        self.right_is_holding = False
+        if self.right_click_timer:
+            event.widget.after_cancel(self.right_click_timer)
+            self.right_click_timer = None
 
         # Start a timer
-        self.hold_timer = self.root.after(self.HOLD_DELAY, lambda: self.on_right_hold(event))
+        self.right_hold_timer = self.root.after(self.HOLD_DELAY, lambda: self.set_right_holding(event, True))
+
+    # Set right_is_holding to True, allowing right click motions
+    def set_right_holding(self, event, hold):
+        self.status.config(
+            text="Hold right click"
+        )
+        self.reset_variables("right_hold")
+
+        clicked = self.find_bubble_at(event.x, event.y, 48, True)
+        if clicked:
+            self.selected_bubble = clicked
+            self.right_is_holding = hold
 
     # Right click single double checker - if hold method wasn't called,
     # call single or double method
     def right_click_release(self, event):
         # Reset hold timer
-        if self.hold_timer:
-            self.root.after_cancel(self.hold_timer)
-            self.hold_timer = None
+        if self.right_hold_timer:
+            self.root.after_cancel(self.right_hold_timer)
+            self.right_hold_timer = None
 
         # If hold was called, return
-        if self.is_holding:
-            self.click_count = 0
+        if self.right_is_holding:
+            self.right_click_count = 0
             return
 
         # Count the amount of click releases within a small time period,
         # then call single/double clicks
-        self.click_count += 1
-        if self.click_count == 1:
-            self.click_timer = self.root.after(self.DOUBLE_DELAY, lambda: self.on_right_click(event))
-        elif self.click_count > 1:
+        self.right_click_count += 1
+        if self.right_click_count == 1:
+            self.right_click_timer = self.root.after(self.DOUBLE_DELAY, lambda: self.on_right_click(event))
+        elif self.right_click_count > 1:
             self.on_double_right_click(event)
 
 
@@ -558,7 +492,7 @@ class AsterismGUI:
     # When you click on a thought, pull up thought menu*            *incomplete
     def on_right_click(self, event):
 
-        self.click_count = 0  # reset click counter
+        self.right_click_count = 0  # reset click counter
 
         self.status.config(
             text="Single right click"
@@ -567,30 +501,35 @@ class AsterismGUI:
         self.reset_variables("right_single")
 
         # Check for thought bubble
-        clicked = self.find_bubble_at(event.x, event.y, 48)
+        clicked = self.find_bubble_at(event.x, event.y, 48, True)
         if clicked is None:
             return
 
         self.selected_bubble = clicked
 
-        self.draw_map()
-
-        xval = clicked.xpos + 65
-        yval = clicked.ypos -50
-
-        self.thought_menu.place(x= xval, y= yval)
-        self.description_text.delete("1.0", "end")
-        self.description_text.insert("1.0", self.selected_bubble.description)
+        # Open thought menu near thought
+        self.menus.show_thought_menu(clicked)
 
     # Double right click function call
-    #
+    # Brings up the menu for the selected connection
     def on_double_right_click(self, event):
 
-        self.click_count = 0  # reset click counter
+        self.right_click_count = 0  # reset click counter
 
         self.status.config(
             text="Double right click"
         )
+
+        self.reset_variables("right_double")
+
+        # Check for connection
+        clicked = self.find_connection_at(event.x, event.y)
+        if clicked is None:
+            return
+
+        self.selected_connection = clicked
+
+        self.menus.show_connection_menu(clicked)
 
         return
 
@@ -598,9 +537,9 @@ class AsterismGUI:
     #
     def on_right_hold(self, event):
 
-        # Reset click count, is_holding is set to true to prevent single/double click calls
-        self.is_holding = True
-        self.click_count = 0
+        # Reset click count, left_is_holding is set to true to prevent single/double click calls
+        self.right_is_holding = True
+        self.right_click_count = 0
 
         self.status.config(
             text="Hold right click"
@@ -608,48 +547,24 @@ class AsterismGUI:
         return
 
     # ------------------------------
-    # ADD BUBBLE  -Redacted
-    # ------------------------------
-
-    # ------------------------------
-    # FIND BUBBLE UNDER MOUSE
+    # FIND BUBBLE OR CONNECTION UNDER MOUSE
     # ------------------------------
 
     # Find the bubble nearest the mouse within a given radius
-    def find_bubble_at(self, x, y, radius):
+    #
+    def find_bubble_at(self, x, y, radius, check_self):
 
+        # Radius standard is 48, though it may be increased if you want to avoid being too close
         greatest_distance = radius + 1
         closest_bubble = None
 
-        # Radius standard is 48, though it may be increased if you want to avoid being too close
-        for bubble in reversed(self.map.bubbles):
+        # Will allow checking your own node
+        if check_self:
+            for bubble in reversed(self.map.bubbles):
 
-            # Get distance
-            distance = math.hypot(
-                x - bubble.xpos, y - bubble.ypos
-            )
-
-            # Find the shortest distance within the radius
-            if distance <= radius and distance < greatest_distance:
-                greatest_distance = distance
-                closest_bubble = bubble
-
-        return closest_bubble
-
-    # Alternate version of the method that will not return a given bubble under any circumstance.
-    # This is used for when moving a thought.
-    def find_other_bubble_at(self, x, y, radius, current_bubble):
-
-        greatest_distance = radius + 1
-        closest_bubble = None
-
-        # Radius standard is 48, though it may be increased if you want to avoid being too close
-        for bubble in reversed(self.map.bubbles):
-
-            if bubble is not current_bubble:
                 # Get distance
                 distance = math.hypot(
-                    x - bubble.xpos, y - bubble.ypos
+                    x - bubble.x, y - bubble.y
                 )
 
                 # Find the shortest distance within the radius
@@ -657,97 +572,77 @@ class AsterismGUI:
                     greatest_distance = distance
                     closest_bubble = bubble
 
+        # Will only check other non-selected thoughts
+        else:
+            for bubble in reversed(self.map.bubbles):
+
+                if bubble is not self.selected_bubble:
+                    # Get distance
+                    distance = math.hypot(
+                        x - bubble.x, y - bubble.y
+                    )
+
+                    # Find the shortest distance within the radius
+                    if distance <= radius and distance < greatest_distance:
+                        greatest_distance = distance
+                        closest_bubble = bubble
+
         return closest_bubble
 
-    # ------------------------------
-    # DRAW MAP
-    # ------------------------------
+    def find_connection_at(self, x, y):
 
-    def draw_map(self):
+        greatest_distance = 41
+        closest_connection = None
 
-        # Set layer name to current layer
-        self.layer_title.config(
-            text=self.map.layer_names[self.map.current_layer]
-        )
-
-        self.canvas.delete("all")
-
-        # Draw connections first.
-        for connection in self.map.connections:
-            # Filter out connections not in this layer.
-            if connection.layer == self.map.current_layer:
-
-                # Grab Bubble X & Y positions
-                start_x = connection.node_one.xpos   # Bubble 1: x & y position
-                start_y = connection.node_one.ypos
-                end_x = connection.node_two.xpos     # Bubble 2: x & y position
-                end_y = connection.node_two.ypos
-
-                # Draw connection line.
-                self.canvas.create_line(
-                    start_x,
-                    start_y,
-                    end_x,
-                    end_y,
-                    fill=connection.rgb,
-                    width=2,
-                    arrow=tk.LAST
-                )
-
-                #write connection type name
-                midpoint_x = (start_x + end_x) / 2
-                midpoint_y = (start_y + end_y) / 2
-
-                self.canvas.create_text(
-                    midpoint_x,
-                    midpoint_y,
-                    text=connection.name,
-                    fill="#a6adc8",
-                    font=("Arial", 11, "bold")
-                )
-
-        # Draw thought bubbles
-        for bubble in self.map.bubbles:
-
-            w = bubble.width
-            h = bubble.height
-
-            # Highlight selected source
-            if bubble is self.selected_bubble:
-                outline = "#f9e2af"
-                width = 5
-            else:
-                outline = "#89b4fa"
-                width = 3
-
-            # Draw Thought with center at bubble's X & Y position
-            self.canvas.create_oval(
-                bubble.xpos - w,
-                bubble.ypos - h,
-                bubble.xpos + w,
-                bubble.ypos + h,
-                fill=bubble.rgb,
-                outline=outline,
-                width=width
+        for connection in reversed(self.map.connections):
+            distance = math.hypot(
+                x - connection.x, y - connection.y
             )
 
-            self.canvas.create_text(
-                bubble.xpos,
-                bubble.ypos,
-                text=bubble.name,
-                fill="#cdd6f4",
-                font=("Arial", 11, "bold"),
-                width=85
-            )
+            # Find the shortest distance within the radius
+            if distance <= 40 and distance < greatest_distance and connection.layer == self.map.current_layer:
+                greatest_distance = distance
+                closest_connection = connection
+
+        return closest_connection
 
     # ------------------------------
     # Element Removal
     # ------------------------------
 
-    # Deletes the selected bubble. This bubble
+    # Deletes the selected bubble.
     def delete_thought(self):
+        # Check for selected bubble
+        if self.selected_bubble is None:
+            return
+
+        # Delete bubble ids
+        ids = self.bubble_id.pop(self.selected_bubble)
+        self.canvas.delete(ids["oval"])
+        self.canvas.delete(ids["text"])
+
+        # Delete bubble from map, reset variables
+        for connection in reversed(self.map.connections):
+            if connection.node_one == self.selected_bubble or connection.node_two == self.selected_bubble:
+                ids = self.connection_id.pop(connection)
+                self.canvas.delete(ids["line"])
+                self.canvas.delete(ids["text"])
+
         self.map.remove_bubble(self.selected_bubble)
-        self.selected_bubble = None
+        self.reset_variables("")
+
+    # Deletes the selected connection
+    def delete_connection(self):
+
+        if self.selected_connection is None:
+            return
+
+        # Delete connection ids
+        ids = self.connection_id.pop(self.selected_connection)
+        self.canvas.delete(ids["line"])
+        self.canvas.delete(ids["text"])
+
+        self.map.remove_connection(self.selected_connection)
         self.reset_variables("")
 
     # ------------------------------
@@ -756,14 +651,30 @@ class AsterismGUI:
 
     # Change description of a given thought on keystroke
     def update_desc(self, event):
-        self.selected_bubble.description = self.description_text.get("1.0", "end-1c")
+        if self.selected_bubble:
+            self.selected_bubble.description = self.menus.description_text.get("1.0", "end-1c")
+        elif self.selected_connection:
+            self.selected_connection.description = self.menus.con_description_text.get("1.0", "end-1c")
+
+    # Change the selected thought name on keystroke
+    def update_name(self, event):
+        if self.selected_bubble:
+            self.selected_bubble.name = self.menus.thought_name_slot.get().capitalize()
+        elif self.selected_connection:
+            self.selected_connection.name = self.menus.connection_name_slot.get().capitalize()
 
     # Reset variable values if you use a different function midway
     # This function needs a bit of a rework. Don't mind it yet.
     def reset_variables(self, mode: str):
-        self.thought_menu.place_forget()
-        self.draw_map()
+        if mode != "left_hold":
+            self.selected_bubble = None
+        if mode != "right_hold":
+            self.selected_connection = None
+        self.menus.hide_thought_menu()
+        self.menus.hide_connection_menu()
         self.last_click = mode
+
+    #def connection_recolor
 
     # Focus function should show all connections for the selected thought.
     # Other connections should be transparent
@@ -774,8 +685,296 @@ class AsterismGUI:
     def cycle_layer(self):
         if self.map.current_layer >= len(self.map.layer_names) - 1:
             self.map.current_layer = 0
-            self.draw_map()
 
         else: self.map.current_layer += 1
 
+    # ------------------------------
+    # DRAW FUNCTIONS
+    # ------------------------------
+
+    def draw_map(self):
+
+        # Set layer name to current layer
+        self.layer_title.config(
+            text=self.map.layer_names[self.map.current_layer]
+        )
+
+        #self.canvas.delete("all")
+
+        # Draw thought connection line
+        if self.last_click == "left_single" and self.selected_bubble:
+            # Update temp line
+            self.canvas.coords(
+                self.connection_line,
+                self.selected_bubble.x,
+                self.selected_bubble.y,
+                self.mouse_x,
+                self.mouse_y
+            )
+
+            self.canvas.itemconfigure(
+                self.connection_line,
+                state="normal"
+            )
+        else:
+            self.canvas.itemconfigure(
+                self.connection_line,
+                state="hidden"
+            )
+
+        ids = self.placement_guide
+
+        # Draw bubble placement and minimum distance ring
+        if self.left_is_holding:
+
+            # Placement Ring - How close a bubble can be placed to another
+            self.canvas.coords(
+                ids["pr"],
+                self.mouse_x - 144, self.mouse_y - 144,
+                self.mouse_x + 144, self.mouse_y + 144
+            )
+            self.canvas.itemconfigure(
+                ids["pr"],
+                state="normal"
+            )
+
+            self.canvas.coords(
+                ids["inner"],
+                self.mouse_x - 48, self.mouse_y - 48,
+                self.mouse_x + 48, self.mouse_y + 48
+            )
+            self.canvas.itemconfigure(
+                ids["inner"],
+                state="normal"
+            )
+        else:
+            self.canvas.itemconfigure(
+                ids["pr"],
+                state="hidden"
+            )
+            self.canvas.itemconfigure(
+                ids["inner"],
+                state="hidden"
+            )
+
+
+        # Draw connections first.
+        for connection in self.map.connections:
+            # Filter out connections not in this layer.
+            if connection.layer == self.map.current_layer:
+                # If connection does not have a set of IDs, create them
+                if connection not in self.connection_id:
+                    self.create_connection(connection)
+
+                # Update connection IDs, then use them
+                self.update_connection(connection)
+                ids = self.connection_id[connection]
+
+                # Reveal connections in current layer
+                self.canvas.itemconfigure(ids["line"], state = "normal")
+                self.canvas.itemconfigure(ids["text"], state = "normal")
+
+            elif connection in self.connection_id:
+
+                ids = self.connection_id[connection]
+
+                # Hide connections outside of current layer
+                self.canvas.itemconfigure(ids["line"], state="hidden")
+                self.canvas.itemconfigure(ids["text"], state="hidden")
+
+        for bubble in self.map.bubbles:
+
+            if bubble not in self.bubble_id:
+                self.create_bubble(bubble)
+
+            self.update_bubble(bubble)
+
+
+
+    # Adds rendered objects for new bubble
+    def create_bubble(self, bubble):
+
+        # Create oval object
+        oval = self.canvas.create_oval(
+            bubble.x - bubble.radius,
+            bubble.y - bubble.radius,
+            bubble.x - bubble.radius,
+            bubble.y - bubble.radius,
+            fill = bubble.rgb,
+            outline = "#89B4FA",
+            width = 3
+        )
+
+        # Create text object
+        text = self.canvas.create_text(
+            bubble.x,
+            bubble.y,
+            text = bubble.name,
+            fill = "#CDD6F4",
+            font = ("Arial", 11, "bold"),
+            width = 85
+        )
+
+        # Set bubble ids
+        self.bubble_id[bubble] = {
+            "oval": oval,
+            "text": text
+        }
+
+    # Update existing bubble rendering object
+    def update_bubble(self, bubble):
+
+        ids = self.bubble_id[bubble]
+
+        # Update oval position
+        self.canvas.coords(
+            ids["oval"],
+            bubble.x - bubble.radius,
+            bubble.y - bubble.radius,
+            bubble.x + bubble.radius,
+            bubble.y + bubble.radius,
+        )
+
+        # Update text position
+        self.canvas.coords(
+            ids["text"],
+            bubble.x,
+            bubble.y
+        )
+
+        # Change outline if selected
+        if bubble is self.selected_bubble:
+            outline = "#F9E2AF"
+            width = 5
+        else:
+            outline = "#89B4FA"
+            width = 3
+
+        # Update oval color
+        self.canvas.itemconfigure(
+            ids["oval"],
+            fill = bubble.rgb,
+            outline = outline,
+            width = width
+        )
+
+        # Update text
+        self.canvas.itemconfigure(
+            ids["text"],
+            text = bubble.name
+        )
+
+    # Adds rendered objects for new connection
+    def create_connection(self, connection):
+
+        x1 = connection.node_one.x
+        y1 = connection.node_one.y
+        x2 = connection.node_two.x
+        y2 = connection.node_two.y
+
+        # Get the midpoints
+        midpoint_x = int((x1 + x2) / 2)
+        midpoint_y = int((y1 + y2) / 2)
+
+        points = [x1, y1, midpoint_x, midpoint_y, x2, y2]
+        # Create line object
+        line = self.canvas.create_line(
+            points,
+            fill = connection.rgb,
+            width = 2,
+            arrow = tk.LAST,
+            splinesteps= 60,
+            smooth = True,
+        )
+
+
+
+        # Create text object at midpoints
+        text = self.canvas.create_text(
+            midpoint_x,
+            midpoint_y,
+            text = connection.name,
+            fill = "#A6ADC8",
+            font = ("Arial", 11, "bold"),
+        )
+
+        self.connection_id[connection] = {
+            "line": line,
+            "text": text
+        }
+
+    # Changes connections based on coordinates of the original in the map
+    def update_connection(self, connection):
+
+        ids = self.connection_id[connection]
+
+        # Gather x-y coords of each node.
+        # adding midpoints 1 and 3 makes the curve less smooth so the names stay close to the line.
+        x1 = connection.node_one.x
+        y1 = connection.node_one.y
+        mid_x1 = (connection.x + connection.x + connection.node_one.x) / 3
+        mid_y1 = (connection.y + connection.y + connection.node_one.y) / 3
+        mid_x2 = connection.x
+        mid_y2 = connection.y
+        mid_x3 = (connection.x + connection.x + connection.node_two.x) / 3
+        mid_y3 = (connection.y + connection.y + connection.node_two.y) / 3
+        x2 = connection.node_two.x
+        y2 = connection.node_two.y
+
+        # Update line position
+        self.canvas.coords(
+            ids["line"],
+            x1, y1, mid_x1, mid_y1, mid_x2, mid_y2, mid_x3, mid_y3, x2, y2
+        )
+
+        # Update text position
+        self.canvas.coords(
+            ids["text"],
+            mid_x2,
+            mid_y2
+        )
+
+        # Update line
+        self.canvas.itemconfigure(
+            ids["line"],
+            fill = connection.rgb
+        )
+
+        # Update text
+        self.canvas.itemconfigure(
+            ids["text"],
+            text = connection.name
+        )
+
+        # This prevents it from laying on top of thoughts
+        self.canvas.tag_lower(ids["line"])
+
+    # ------------------------------
+    # DRAW CYCLE FUNCTIONS
+    # ------------------------------
+
+    # Starts animation cycle
+    def start_cycle(self):
+        self.last_frame = time.perf_counter()
+        self.draw_cycle()
+
+    # Starts an animation cycle currently 60 fps
+    def draw_cycle(self):
+        if not self.running:
+            return
+
+        current_time = time.perf_counter()
+
+        dt = current_time - self.last_frame
+        self.last_frame = current_time
+
+        #self.update(dt)
+        self.update_cycle(dt)
+
+        # Draws canvas
         self.draw_map()
+        self.root.after(self.frame_interval, self.draw_cycle)
+
+    # Updates objects for animation logic
+    def update_cycle(self, dt):
+        pass

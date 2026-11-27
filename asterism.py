@@ -21,8 +21,8 @@ class Asterism:
         self.current_layer = 0
 
     # Create a new bubble
-    def add_bubble(self, name, rgb, desc, xpos, ypos, width, height):
-        new_thought = Thought(name, rgb, desc, xpos, ypos, width, height)
+    def add_bubble(self, name, rgb, desc, x, y, radius):
+        new_thought = Thought(name, rgb, desc, x, y, radius)
         self.bubbles.append(new_thought)
 
     # Create a new connection. Connections adhere to layer rules and will not appear
